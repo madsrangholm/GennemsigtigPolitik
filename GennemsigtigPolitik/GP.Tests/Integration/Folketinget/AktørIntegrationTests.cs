@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
 using System.Linq;
@@ -7,8 +8,13 @@ using GP.BLL.Caching;
 using GP.BLL.Configuration.DAL.Folketinget;
 using GP.BLL.Interfaces.Caching;
 using GP.BLL.Interfaces.DAL.Folketinget;
+using GP.BLL.Model.Folketinget;
 using GP.DAL.Folketinget;
 using GP.DAL.Folketinget.Interfaces;
+using GP.DAL.Folketinget.Model.Aktør;
+using GP.DAL.Folketinget.Model.Dokument;
+using GP.DAL.Folketinget.Model.Møde;
+using GP.DAL.Folketinget.Model.Øvrige;
 using LightInject;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -20,415 +26,628 @@ namespace GP.Tests.Integration.Folketinget
     [TestClass]
     public class AktørIntegrationTests : TestBase
     {
+        private const int Threads = 1000;
         protected override void ConfigureContainer(ServiceContainer container)
         {
-            container.Register<IFolketingetServiceRepository, FolketingetServiceRepository>(new PerContainerLifetime());
+            container.Register<IFolketingetService, FolketingetService>(new PerContainerLifetime());
             container.Register<IGlobalCache, GlobalCache>();
-            container.RegisterInstance<IFolketingetConfig>((FolketingetConfig) ConfigurationManager.GetSection("folketingetConfig"));
+            container.RegisterInstance<IFolketingetConfig>(
+                (FolketingetConfig) ConfigurationManager.GetSection("folketingetConfig"));
+        }
+
+        private static void AnalyseTimes(IEnumerable<long> times)
+        {
+            Console.WriteLine("Average ms: " + times.Average());
+            var stdDeviation = Math.Sqrt(times.Average(x => Math.Pow(x - times.Average(), 2)));
+            var deviationPercent = stdDeviation/times.Average();
+            Assert.IsTrue(deviationPercent < 0.1); //10%
+            Console.WriteLine("Std. Deviation ms: {0} ({1})", stdDeviation , deviationPercent.ToString("P1"));
         }
 
 
         [TestMethod, TestCategory("Integration")]
         public void TestGetAktørList()
         {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
-           
-            Parallel.For(0, 10, x =>
+            var service = Container.GetInstance<IFolketingetService>();
+            var tasks = new Task<IEnumerable<Actor>>[Threads];
+            var times = new long[Threads];
+            Parallel.For(0, Threads, async x =>
             {
                 var stopWatch = new Stopwatch();
                 stopWatch.Start();
-                var list = service.AktørList();
+                tasks[x] = service.GetActors();
+                var list = await tasks[x];
                 stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });          
-        }
-
-        [TestMethod, TestCategory("Integration"), Ignore]
-        public void TestGetAktørAktørList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
-
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.AktørAktørList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
+                times[x] = stopWatch.ElapsedMilliseconds;
+                
             });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetAktørTypeList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
-
-            Parallel.For(0, 10, x =>
+            var results = Task.WhenAll(tasks).Result;
+            AnalyseTimes(times);
+            foreach (var list in results)
             {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.AktørTypeList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
                 Assert.IsNotNull(list);
                 Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetDokumentList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
-
-            Parallel.For(0, 10, x =>
+            }
+            foreach (var actor in results.First())
             {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.DokumentList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
+                Console.WriteLine(actor.FirstName + " " + actor.LastName);
+            }
         }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetDokumentationList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.DokumentationList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetDokumentKategoriList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration"), Ignore]
+        //public void TestGetAktørAktørList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<AktørAktør>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.AktørAktørList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.DokumentKategoriList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetDokumentStatusList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetAktørTypeList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<AktørType>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.AktørTypeList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.DokumentStatusList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetDokumentTypeList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetDokumentList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Dokument>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.DokumentList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.DokumentTypeList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetFilList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetDokumentationList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Dokumentation>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.DokumentationList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.FilList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetNyhedList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetDokumentKategoriList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<DokumentKategori>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.DokumentKategoriList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.NyhedList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Console.WriteLine(list.Count());
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetOmtrykList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetDokumentStatusList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<DokumentStatus>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.DokumentStatusList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.OmtrykList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetTaleList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetDokumentTypeList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<DokumentType>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.DokumentTypeList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.TaleList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetVideoList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetFilList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Fil>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.FilList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.VideoList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetAfstemningList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetNyhedList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Nyhed>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.NyhedList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.AfstemningList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetAfstemningstypeList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetOmtrykList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Omtryk>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.OmtrykList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.AfstemningstypeList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetDagsordenspunktList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetTaleList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Tale>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.TaleList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.DagsordenspunktList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetMødeList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetVideoList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Video>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.VideoList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.MødeList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetMødeStatusList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetAfstemningList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Afstemning>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.AfstemningList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.MødeStatusList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetMødeTypeList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetAfstemningstypeList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Afstemningstype>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.AfstemningstypeList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.MødeTypeList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetStemmeList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetDagsordenspunktList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Dagsordenspunkt>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.DagsordenspunktList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.StemmeList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetStemmeTypeList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetMødeList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Møde>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.MødeList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.StemmeTypeList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetKolonneBeskrivelseList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetMødeStatusList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<MødeStatus>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.MødeStatusList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.KolonneBeskrivelseList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetSlettetList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetMødeTypeList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<MødeType>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.MødeTypeList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.SlettetList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetSlettetMapList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetStemmeList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Stemme>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.StemmeList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.SlettetMapList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
-        [TestMethod, TestCategory("Integration")]
-        public void TestGetTabelBeskrivelseList()
-        {
-            var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetStemmeTypeList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<StemmeType>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.StemmeTypeList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
 
-            Parallel.For(0, 10, x =>
-            {
-                var stopWatch = new Stopwatch();
-                stopWatch.Start();
-                var list = service.TabelBeskrivelseList();
-                stopWatch.Stop();
-                Console.WriteLine($"#{x}: {stopWatch.ElapsedMilliseconds} ms");
-                Assert.IsNotNull(list);
-                Assert.IsTrue(list.Any());
-            });
-        }
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetKolonneBeskrivelseList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<KolonneBeskrivelse>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.KolonneBeskrivelseList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
+
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetSlettetList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<Slettet>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.SlettetList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
+
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetSlettetMapList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<SlettetMap>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.SlettetMapList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
+
+        //[TestMethod, TestCategory("Integration")]
+        //public void TestGetTabelBeskrivelseList()
+        //{
+        //    var service = Container.GetInstance<IFolketingetServiceRepository>();
+        //    var tasks = new Task<IEnumerable<TabelBeskrivelse>>[Threads];
+        //    var times = new long[Threads];
+        //    Parallel.For(0, Threads, async x =>
+        //    {
+        //        var stopWatch = new Stopwatch();
+        //        stopWatch.Start();
+        //        tasks[x] = service.TabelBeskrivelseList();
+        //        var list = await tasks[x];
+        //        stopWatch.Stop();
+        //        times[x] = stopWatch.ElapsedMilliseconds;
+        //    });
+        //    var results = Task.WhenAll(tasks).Result;
+        //    AnalyseTimes(times);
+        //    foreach (var list in results)
+        //    {
+        //        Assert.IsNotNull(list);
+        //        Assert.IsTrue(list.Any());
+        //    }
+        //}
     }
 }

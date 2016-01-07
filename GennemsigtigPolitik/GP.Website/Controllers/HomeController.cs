@@ -1,20 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Web;
 using System.Web.Mvc;
-using GP.BLL.Interfaces.DAL.Folketinget;
 
 namespace GP.Website.Controllers
 {
     public class HomeController : Controller
     {
-        private readonly IFolketingetService _ftService;
-        public HomeController(IFolketingetService ftService)
-        {
-            _ftService = ftService;
-        }
-        public ActionResult Index()
+        public async Task<ActionResult> Index()
         {
             return View();
         }

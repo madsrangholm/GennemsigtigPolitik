@@ -25,6 +25,8 @@ namespace GP.BLL.Caching
         private static readonly ConcurrentDictionary<string, CacheKey> Keys =
             new ConcurrentDictionary<string, CacheKey>();
 
+
+
         public static CacheKey Get(string key)
         {
             return Keys.GetOrAdd(key, new CacheKey(key));

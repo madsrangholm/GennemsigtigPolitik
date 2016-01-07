@@ -4,8 +4,6 @@ using System.Linq;
 using System.Text;
 using System.Web.Mvc;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using GP.Website;
-using GP.Website.Controllers;
 
 namespace GP.Tests.Controllers
 {

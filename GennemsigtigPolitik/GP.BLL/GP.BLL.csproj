@@ -90,11 +90,11 @@
     <Compile Include="Caching\CachePolicies.cs" />
     <Compile Include="Caching\GlobalCache.cs" />
     <Compile Include="Configuration\DAL\Folketinget\FolketingetConfig.cs" />
+    <Compile Include="Extensions\TaskExtensions.cs" />
     <Compile Include="Interfaces\Caching\IGlobalCache.cs" />
     <Compile Include="Interfaces\Caching\ISessionCache.cs" />
     <Compile Include="Interfaces\DAL\Folketinget\IFolketingetService.cs" />
     <Compile Include="Interfaces\DAL\Folketinget\IFolketingetConfig.cs" />
-    <Compile Include="Interfaces\DAL\Folketinget\IFolketingetServiceCached.cs" />
     <Compile Include="Interfaces\Logging\ILogger.cs" />
     <Compile Include="Logging\ConsoleLogger.cs" />
     <Compile Include="Model\Folketinget\Actor.cs" />

@@ -33,8 +33,8 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="LightInject, Version=4.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\LightInject.4.0.0\lib\net46\LightInject.dll</HintPath>
+    <Reference Include="LightInject, Version=4.0.2.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\LightInject.4.0.2\lib\net46\LightInject.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Microsoft.CSharp" />
@@ -108,10 +108,6 @@
     <ProjectReference Include="..\GP.DAL.Folketinget\GP.DAL.Folketinget.csproj">
       <Project>{09a4b019-2389-45fd-bc35-f3f575804e61}</Project>
       <Name>GP.DAL.Folketinget</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\GP.Website\GP.Website.csproj">
-      <Project>{D3475FF6-D7F7-4B91-A9C4-F889E3EA4AFF}</Project>
-      <Name>GP.Website</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

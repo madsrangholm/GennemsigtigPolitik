@@ -45,10 +45,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Conversion.cs" />
-    <Compile Include="FolketingetServiceRepository.cs" />
+    <Compile Include="ConversionHelper.cs" />
     <Compile Include="FolketingetService.cs" />
-    <Compile Include="FolketingetServiceCached.cs" />
     <Compile Include="Interfaces\IFolketingetServiceRepository.cs" />
     <Compile Include="Model\Aktør\Aktør.cs" />
     <Compile Include="Model\Aktør\AktørAktør.cs" />
